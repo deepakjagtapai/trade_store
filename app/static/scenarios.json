@@ -1,0 +1,139 @@
+{
+  "scenarios": [
+    {
+      "id": "sample-real-date",
+      "title": "1. Sample table as-is (real date)",
+      "description": "Clears the simulated date and loads the four rows of the assignment's sample table in the order shown. Expected: all four are rejected with MATURITY_IN_PAST, because every sample maturity date is before the real current date.",
+      "date": null,
+      "reset": false,
+      "trades": [
+        {"trade_id": "T1", "version": 1, "counterparty_id": "CP-1", "portfolio_id": "B1", "maturity_date": "20/05/2020"},
+        {"trade_id": "T2", "version": 2, "counterparty_id": "CP-2", "portfolio_id": "B1", "maturity_date": "20/05/2021"},
+        {"trade_id": "T2", "version": 1, "counterparty_id": "CP-1", "portfolio_id": "B1", "maturity_date": "20/05/2021"},
+        {"trade_id": "T3", "version": 3, "counterparty_id": "CP-3", "portfolio_id": "B2", "maturity_date": "20/05/2014"}
+      ],
+      "expected": [
+        {"status": 400, "error_code": "MATURITY_IN_PAST"},
+        {"status": 400, "error_code": "MATURITY_IN_PAST"},
+        {"status": 400, "error_code": "MATURITY_IN_PAST"},
+        {"status": 400, "error_code": "MATURITY_IN_PAST"}
+      ]
+    },
+    {
+      "id": "lower-version",
+      "title": "2. Version rule \u2013 lower version rejected",
+      "description": "Date 15/03/2015, starting from an empty store. Submits T2 v2, then T2 v1. Expected: v2 is accepted; v1 is rejected with LOWER_VERSION (409) because v2 is already stored.",
+      "date": "2015-03-15",
+      "reset": true,
+      "trades": [
+        {"trade_id": "T2", "version": 2, "counterparty_id": "CP-2", "portfolio_id": "B1", "maturity_date": "2021-05-20"},
+        {"trade_id": "T2", "version": 1, "counterparty_id": "CP-1", "portfolio_id": "B1", "maturity_date": "2021-05-20"}
+      ],
+      "expected": [
+        {"status": 201},
+        {"status": 409, "error_code": "LOWER_VERSION"}
+      ],
+      "expected_store": [
+        {"trade_id": "T2", "version": 2, "counterparty_id": "CP-2", "portfolio_id": "B1", "expired": false}
+      ]
+    },
+    {
+      "id": "same-version",
+      "title": "3. Version rule \u2013 same version replaces",
+      "description": "Date 15/03/2015, starting from an empty store. Submits T2 v2 in portfolio B1, then T2 v2 again in portfolio B2. Expected: both accepted; the store holds a single T2 v2 row with portfolio B2.",
+      "date": "2015-03-15",
+      "reset": true,
+      "trades": [
+        {"trade_id": "T2", "version": 2, "counterparty_id": "CP-2", "portfolio_id": "B1", "maturity_date": "2021-05-20"},
+        {"trade_id": "T2", "version": 2, "counterparty_id": "CP-2", "portfolio_id": "B2", "maturity_date": "2021-05-20"}
+      ],
+      "expected": [
+        {"status": 201},
+        {"status": 201}
+      ],
+      "expected_store": [
+        {"trade_id": "T2", "version": 2, "counterparty_id": "CP-2", "portfolio_id": "B2", "expired": false}
+      ]
+    },
+    {
+      "id": "higher-version",
+      "title": "4. Version rule \u2013 higher version adds history",
+      "description": "Date 14/03/2015, starting from an empty store. Submits T2 v1, then T2 v2. Expected: both accepted and stored as separate rows (T2 v2 listed above T2 v1).",
+      "date": "2015-03-14",
+      "reset": true,
+      "trades": [
+        {"trade_id": "T2", "version": 1, "counterparty_id": "CP-1", "portfolio_id": "B1", "maturity_date": "2021-05-20"},
+        {"trade_id": "T2", "version": 2, "counterparty_id": "CP-2", "portfolio_id": "B1", "maturity_date": "2021-05-20"}
+      ],
+      "expected": [
+        {"status": 201},
+        {"status": 201}
+      ],
+      "expected_store": [
+        {"trade_id": "T2", "version": 1, "counterparty_id": "CP-1", "portfolio_id": "B1", "expired": false},
+        {"trade_id": "T2", "version": 2, "counterparty_id": "CP-2", "portfolio_id": "B1", "expired": false}
+      ]
+    },
+    {
+      "id": "maturity",
+      "title": "5. Maturity rule",
+      "description": "Date 15/03/2015. Submits T3 v3 maturing 20/05/2014. Expected: rejected with MATURITY_IN_PAST (400) because the maturity date is before the simulated today.",
+      "date": "2015-03-15",
+      "reset": false,
+      "trades": [
+        {"trade_id": "T3", "version": 3, "counterparty_id": "CP-3", "portfolio_id": "B2", "maturity_date": "2014-05-20"}
+      ],
+      "expected": [
+        {"status": 400, "error_code": "MATURITY_IN_PAST"}
+      ]
+    },
+    {
+      "id": "expiry-step-1",
+      "title": "6. Expiry rule \u2013 step 1",
+      "description": "Date 01/05/2014, starting from an empty store. Submits T3 v3 maturing 20/05/2014. Expected: accepted, Expired = N. Then load step 2.",
+      "date": "2014-05-01",
+      "reset": true,
+      "trades": [
+        {"trade_id": "T3", "version": 3, "counterparty_id": "CP-3", "portfolio_id": "B2", "maturity_date": "2014-05-20"}
+      ],
+      "expected": [
+        {"status": 201}
+      ],
+      "expected_store": [
+        {"trade_id": "T3", "version": 3, "counterparty_id": "CP-3", "portfolio_id": "B2", "expired": false}
+      ]
+    },
+    {
+      "id": "expiry-step-2",
+      "title": "7. Expiry rule \u2013 step 2",
+      "description": "Moves the date to 21/05/2014, the day after T3 matures. Nothing to submit: click \"Run expiry sweep\". Expected: 1 trade marked expired and T3 shows Expired = Y.",
+      "date": "2014-05-21",
+      "reset": false,
+      "requires": "expiry-step-1",
+      "trades": [],
+      "expected": [],
+      "follow_up_sweep": {"expired_count": 1},
+      "expected_store": [
+        {"trade_id": "T3", "version": 3, "counterparty_id": "CP-3", "portfolio_id": "B2", "expired": true}
+      ]
+    }
+  ],
+  "guided_demo": {
+    "id": "guided-demo",
+    "title": "8. Rebuild the sample table (guided demo)",
+    "description": "Click \"Run guided demo\". It resets the store, then moves the simulated date forward while submitting trades, so the store ends up holding the sample table's four trades with only T3 expired. Every step is logged in the Results table, including one deliberate LOWER_VERSION rejection.",
+    "steps": [
+      {"action": "reset"},
+      {"action": "set_date", "date": "2014-05-01"},
+      {"action": "submit", "trade": {"trade_id": "T3", "version": 3, "counterparty_id": "CP-3", "portfolio_id": "B2", "maturity_date": "2014-05-20"}, "expected": {"status": 201}},
+      {"action": "set_date", "date": "2015-03-14"},
+      {"action": "submit", "trade": {"trade_id": "T2", "version": 1, "counterparty_id": "CP-1", "portfolio_id": "B1", "maturity_date": "2021-05-20"}, "expected": {"status": 201}},
+      {"action": "set_date", "date": "2015-03-15"},
+      {"action": "submit", "trade": {"trade_id": "T1", "version": 1, "counterparty_id": "CP-1", "portfolio_id": "B1", "maturity_date": "2020-05-20"}, "expected": {"status": 201}},
+      {"action": "submit", "trade": {"trade_id": "T2", "version": 2, "counterparty_id": "CP-2", "portfolio_id": "B1", "maturity_date": "2021-05-20"}, "expected": {"status": 201}},
+      {"action": "submit", "trade": {"trade_id": "T2", "version": 1, "counterparty_id": "CP-1", "portfolio_id": "B1", "maturity_date": "2021-05-20"}, "expected": {"status": 409, "error_code": "LOWER_VERSION"}},
+      {"action": "sweep", "expected": {"expired_count": 1}}
+    ],
+    "final_message": "Done: the store now matches the sample table, and only T3 is expired. The simulated date is still 15/03/2015. Clicking \"Use real date\" and then \"Run expiry sweep\" would expire every trade, because all sample maturity dates are in the past."
+  }
+}

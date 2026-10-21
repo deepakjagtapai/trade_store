@@ -1,0 +1,66 @@
+@startuml sequence-ui-submit
+title Manual-testing UI - load a scenario and submit trades
+skinparam shadowing false
+autonumber
+
+actor Tester
+participant "Browser\n(app.js)" as Browser
+participant "/admin/clock\n(demo mode)" as ClockApi
+participant "SwitchableClock\n(app.state.clock)" as Clock
+participant "/admin/trades\n(demo mode)" as ResetApi
+participant "POST /trades" as TradesApi
+participant "TradeService" as Service
+database "DB (trades)" as DB
+
+== Page load ==
+Tester -> Browser : open /ui
+Browser -> Browser : GET /config/ui, /static/scenarios.json
+opt demo_mode
+  Browser -> ClockApi : GET /admin/clock
+  ClockApi --> Browser : {today, overridden}
+end
+
+== Load scenario ==
+Tester -> Browser : pick preset, Load scenario
+Browser -> Browser : fill textarea with preset JSON
+alt demo_mode and preset has a date
+  Browser -> ClockApi : PUT /admin/clock {today}
+  ClockApi -> Clock : set_override(date) (locked)
+  ClockApi --> Browser : {today, overridden: true}
+  Browser -> Browser : date bar shows "Simulated"
+else demo_mode and preset uses the real date
+  Browser -> ClockApi : DELETE /admin/clock
+  ClockApi -> Clock : clear_override()
+else demo mode off
+  Browser -> Browser : note "date could not be simulated"
+end
+
+== Submit ==
+Tester -> Browser : Submit
+Browser -> Browser : JSON.parse in try/catch
+alt invalid JSON or not object(s)
+  Browser -> Browser : show error, send nothing
+else valid
+  opt "Start from an empty store" ticked (demo mode)
+    Browser -> ResetApi : DELETE /admin/trades
+    ResetApi -> Service : reset_store()
+    Service -> DB : DELETE FROM trades; COMMIT
+  end
+  loop each trade, sequentially in array order
+    Browser -> TradesApi : POST /trades {trade}
+    TradesApi -> Service : store_trade(trade_in)
+    Service -> Clock : today()
+    Clock --> Service : override or real date
+    Service -> DB : rule checks + INSERT/UPDATE
+    alt accepted
+      TradesApi --> Browser : 201 TradeOut
+    else rejected
+      TradesApi --> Browser : 400 / 409 {error_code, message}\nor 422 validation detail
+    end
+    Browser -> Browser : append row to Results (textContent)
+  end
+  Browser -> TradesApi : GET /trades[?expired=]
+  TradesApi --> Browser : stored trades
+  Browser -> Browser : render Trade Store table\n(Trade Id asc, Version desc, DD/MM/YYYY, Y/N)
+end
+@enduml

@@ -1,0 +1,40 @@
+@startuml sequence-expiry-sweep
+title Expiry sweep - scheduled or manual
+skinparam shadowing false
+autonumber
+
+participant "APScheduler\nBackgroundScheduler" as Scheduler
+actor "Operator" as Operator
+participant "POST /admin/expire-trades" as Route
+participant "run_expiry_job" as Job
+participant "TradeService" as Service
+participant "Clock" as Clock
+participant "TradeRepository" as Repo
+database "DB (trades)" as DB
+
+alt scheduled: once at startup, then daily at EXPIRY_CRON_HOUR:00
+  Scheduler -> Job : run_expiry_job(session_factory, clock)
+  Job -> Job : open Session
+  Job -> Service : expire_matured_trades()
+else manual trigger
+  Operator -> Route : POST /admin/expire-trades
+  Route -> Service : expire_matured_trades()
+end
+
+Service -> Clock : today()
+Clock --> Service : today
+Service -> Repo : mark_expired(today)
+Repo -> DB : UPDATE trades SET expired = true\nWHERE maturity_date < :today AND expired = false
+DB --> Repo : rows affected
+Repo --> Service : expired_count
+Service -> DB : COMMIT
+Service -> Service : log expired_count, run_date
+
+alt scheduled
+  Service --> Job : expired_count
+  Job -> Job : close Session
+else manual trigger
+  Service --> Route : expired_count
+  Route --> Operator : 200 {expired_count, run_date}
+end
+@enduml

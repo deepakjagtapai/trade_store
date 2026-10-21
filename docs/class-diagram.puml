@@ -1,0 +1,127 @@
+@startuml class-diagram
+title Trade Store - Class Diagram
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+hide empty members
+
+package "app.clock" {
+  interface Clock <<Protocol>> {
+    + today() : date
+  }
+  class SystemClock {
+    + today() : date
+  }
+  class FixedClock {
+    - _today : date
+    + today() : date
+    + set(d : date) : None
+  }
+  Clock <|.. SystemClock
+  Clock <|.. FixedClock
+}
+
+package "app.schemas" {
+  class TradeIn <<pydantic>> {
+    + trade_id : str {1..50, stripped}
+    + version : int {>= 1}
+    + counterparty_id : str
+    + portfolio_id : str
+    + maturity_date : date {ISO or DD/MM/YYYY}
+    --
+    extra = "forbid"
+  }
+  class TradeOut <<pydantic>> {
+    + trade_id : str
+    + version : int
+    + counterparty_id : str
+    + portfolio_id : str
+    + maturity_date : date
+    + created_date : date
+    + expired : bool
+    --
+    from_attributes = True
+  }
+  class ErrorResponse <<pydantic>> {
+    + error_code : str
+    + message : str
+  }
+  class ExpiryResult <<pydantic>> {
+    + expired_count : int
+    + run_date : date
+  }
+}
+
+package "app.models" {
+  class TradeORM <<SQLAlchemy>> {
+    + trade_id : str <<PK>>
+    + version : int <<PK>> {>= 1}
+    + counterparty_id : str
+    + portfolio_id : str
+    + maturity_date : date <<index>>
+    + created_date : date
+    + expired : bool = False <<index>>
+  }
+}
+
+package "app.repository" {
+  class TradeRepository {
+    - _session : Session
+    + get(trade_id, version) : TradeORM | None
+    + get_latest(trade_id) : TradeORM | None
+    + get_max_version(trade_id) : int | None
+    + lock_trade(trade_id) : list[int]
+    + list_versions(trade_id) : list[TradeORM]
+    + list_all(expired : bool | None) : list[TradeORM]
+    + add(trade : TradeORM) : TradeORM
+    + mark_expired(today : date) : int
+  }
+}
+
+package "app.service" {
+  class TradeService {
+    - _session : Session
+    - _repo : TradeRepository
+    - _clock : Clock
+    + store_trade(trade_in : TradeIn) : TradeORM
+    + get_latest(trade_id) : TradeORM
+    + get_versions(trade_id) : list[TradeORM]
+    + list_trades(expired : bool | None) : list[TradeORM]
+    + expire_matured_trades() : int
+  }
+}
+
+package "app.exceptions" {
+  class Exception
+  class TradeStoreError {
+    + error_code : str
+    + message : str
+  }
+  class LowerVersionError {
+    error_code = "LOWER_VERSION"
+    + trade_id : str
+    + incoming_version : int
+    + max_version : int
+  }
+  class MaturityInPastError {
+    error_code = "MATURITY_IN_PAST"
+    + maturity_date : date
+    + today : date
+  }
+  class TradeNotFoundError {
+    error_code = "TRADE_NOT_FOUND"
+    + trade_id : str
+  }
+  Exception <|-- TradeStoreError
+  TradeStoreError <|-- LowerVersionError
+  TradeStoreError <|-- MaturityInPastError
+  TradeStoreError <|-- TradeNotFoundError
+}
+
+TradeService --> TradeRepository : uses
+TradeService --> Clock : asks today()
+TradeService ..> TradeIn : consumes
+TradeService ..> TradeORM : creates / updates
+TradeService ..> TradeStoreError : raises
+TradeRepository ..> TradeORM : persists
+TradeOut ..> TradeORM : built from
+@enduml

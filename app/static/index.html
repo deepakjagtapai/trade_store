@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trade Store – Manual Test Console</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="page-header">
+    <h1>Trade Store – Manual Test Console</h1>
+    <p class="subtitle">
+      Rules: a lower version than the stored maximum is rejected, a maturity date before today
+      is rejected, and stored trades are flagged expired once their maturity date has passed.
+    </p>
+  </header>
+
+  <main>
+    <!-- Simulated date (demo mode only) -->
+    <section id="date-bar" class="panel date-bar" hidden aria-label="Simulated date">
+      <div class="date-current">
+        <span class="label">Today</span>
+        <strong id="today-value">–</strong>
+        <span id="today-badge" class="badge">Real</span>
+      </div>
+      <div class="date-controls">
+        <label for="date-input" class="visually-hidden">Simulated date</label>
+        <input type="date" id="date-input">
+        <button type="button" id="set-date-btn">Set date</button>
+        <button type="button" id="real-date-btn" class="secondary">Use real date</button>
+      </div>
+    </section>
+    <p id="date-note" class="note" hidden>Demo mode is off – rules use the real current date.</p>
+
+    <!-- Input -->
+    <section class="panel" aria-labelledby="input-title">
+      <h2 id="input-title">Input</h2>
+      <div class="row">
+        <label for="scenario-select">Scenario</label>
+        <select id="scenario-select"></select>
+        <button type="button" id="load-scenario-btn" class="secondary">Load scenario</button>
+        <button type="button" id="guided-demo-btn" hidden>Run guided demo</button>
+      </div>
+      <p id="scenario-description" class="description"></p>
+      <p id="scenario-note" class="note warning" hidden></p>
+
+      <label for="json-input" class="block-label">
+        Trades as JSON: one object or an array, sent in array order
+      </label>
+      <textarea id="json-input" spellcheck="false" rows="14"></textarea>
+      <p id="json-error" class="error" role="alert" hidden></p>
+
+      <div class="row">
+        <button type="button" id="submit-btn">Submit</button>
+        <button type="button" id="format-btn" class="secondary">Format JSON</button>
+        <button type="button" id="clear-btn" class="secondary">Clear</button>
+        <label id="reset-before-label" class="checkbox" hidden>
+          <input type="checkbox" id="reset-before"> Start from an empty store
+        </label>
+        <span id="busy" class="busy" hidden aria-live="polite">
+          <span class="spinner" aria-hidden="true"></span> Working…
+        </span>
+      </div>
+    </section>
+
+    <!-- Results of the last submission -->
+    <section class="panel" aria-labelledby="results-title">
+      <div class="panel-header">
+        <h2 id="results-title">Results</h2>
+        <button type="button" id="clear-results-btn" class="secondary">Clear results</button>
+      </div>
+      <p id="results-summary" class="message" hidden></p>
+      <div class="table-wrap">
+        <table id="results-table">
+          <thead>
+            <tr>
+              <th>#</th><th>Trade Id</th><th>Version</th><th>Outcome</th>
+              <th>HTTP</th><th>Error Code</th><th>Message</th>
+            </tr>
+          </thead>
+          <tbody id="results-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Everything currently stored -->
+    <section class="panel" aria-labelledby="store-title">
+      <div class="panel-header">
+        <h2 id="store-title">Trade Store <span id="store-count" class="count"></span></h2>
+        <div class="row">
+          <label for="store-filter">Show</label>
+          <select id="store-filter">
+            <option value="">All</option>
+            <option value="false">Active</option>
+            <option value="true">Expired</option>
+          </select>
+          <button type="button" id="refresh-btn" class="secondary">Refresh</button>
+          <button type="button" id="sweep-btn">Run expiry sweep</button>
+          <button type="button" id="reset-btn" class="danger" hidden>Reset store</button>
+        </div>
+      </div>
+      <p id="store-message" class="message" hidden></p>
+      <div class="table-wrap">
+        <table id="store-table">
+          <thead>
+            <tr>
+              <th>Trade Id</th><th>Version</th><th>Counter-Party Id</th><th>Portfolio Id</th>
+              <th>Maturity Date</th><th>Created Date</th><th>Expired</th>
+            </tr>
+          </thead>
+          <tbody id="store-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

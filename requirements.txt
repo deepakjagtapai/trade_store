@@ -1,0 +1,6 @@
+fastapi==0.146.0
+uvicorn[standard]==0.54.0
+pydantic==2.14.1
+pydantic-settings==2.16.0
+SQLAlchemy==2.1.5
+APScheduler==3.11.3

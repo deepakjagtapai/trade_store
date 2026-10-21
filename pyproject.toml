@@ -1,0 +1,53 @@
+[project]
+name = "trade-store"
+version = "1.0.0"
+description = "Trade store enforcing version, maturity and expiry rules"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["."]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "C4", "PT", "RUF", "DTZ"]
+
+[tool.ruff.lint.per-file-ignores]
+# clock.py is the single sanctioned place to read the wall clock.
+"app/clock.py" = ["DTZ011"]
+"tests/unit/test_clock.py" = ["DTZ011"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+packages = ["app"]
+
+[[tool.mypy.overrides]]
+module = ["apscheduler.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "regression: end-to-end regression scenarios replaying the sample trade table",
+    "e2e: browser smoke tests for the /ui page (skipped unless --run-e2e)",
+]
+filterwarnings = [
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = false
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]

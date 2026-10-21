@@ -1,0 +1,56 @@
+@startuml sequence-create-trade
+title POST /trades - store a trade
+skinparam shadowing false
+autonumber
+
+actor Client
+participant "FastAPI route\ncreate_trade" as Route
+participant "TradeService" as Service
+participant "Clock" as Clock
+participant "TradeRepository" as Repo
+database "DB (trades)" as DB
+
+Client -> Route : POST /trades {trade_id, version, ...}
+Route -> Route : validate TradeIn\n(422 on schema error)
+Route -> Service : store_trade(trade_in)
+Service -> Clock : today()
+Clock --> Service : today
+
+alt maturity_date < today
+  Service -> Service : rollback
+  Service --> Route : raise MaturityInPastError
+  Route --> Client : 400 {error_code: "MATURITY_IN_PAST"}
+else maturity_date >= today
+  Service -> Repo : lock_trade(trade_id)
+  Repo -> DB : SELECT version ... FOR UPDATE\n(no-op lock on SQLite)
+  Service -> Repo : get_max_version(trade_id)
+  Repo -> DB : SELECT max(version)
+  DB --> Repo : max_version
+  Repo --> Service : max_version
+
+  alt max_version is not None and version < max_version
+    Service -> Service : rollback
+    Service --> Route : raise LowerVersionError
+    Route --> Client : 409 {error_code: "LOWER_VERSION"}
+  else same version exists
+    Service -> Repo : get(trade_id, version)
+    Repo --> Service : existing TradeORM
+    Service -> Service : overwrite counterparty, portfolio,\nmaturity; created_date = today;\nexpired = False
+    Service -> DB : COMMIT (UPDATE)
+    Service --> Route : TradeORM (replaced)
+    Route --> Client : 201 TradeOut
+  else new version
+    Service -> Repo : get(trade_id, version)
+    Repo --> Service : None
+    Service -> Repo : add(TradeORM(created_date = today, expired = False))
+    Repo -> DB : INSERT
+    opt IntegrityError (concurrent insert of same key)
+      Service -> DB : ROLLBACK
+      Service -> Service : retry steps once
+    end
+    Service -> DB : COMMIT
+    Service --> Route : TradeORM (inserted)
+    Route --> Client : 201 TradeOut
+  end
+end
+@enduml

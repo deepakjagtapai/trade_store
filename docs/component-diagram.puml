@@ -1,0 +1,67 @@
+@startuml component-diagram
+title Trade Store - Components and CI/CD Pipeline
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+actor Client
+actor "Tester\n(browser)" as Tester
+
+package "trade-store (FastAPI process)" {
+  package "Manual-testing UI (ENABLE_UI)" {
+    [app/static\nindex.html, app.js,\nstyles.css, scenarios.json] as Static
+    [ui routes\n/ui, /config/ui, /static] as UiRoutes
+  }
+  package "API layer (app.api)" {
+    [routes.py\n/trades, /admin, /health] as Routes
+    [demo routes (DEMO_MODE)\n/admin/clock, DELETE /admin/trades] as DemoRoutes
+    [dependencies.py\nget_session, get_clock,\nget_switchable_clock,\nget_trade_service] as Deps
+    [main.py\ncreate_app, exception handlers,\nlifespan] as Main
+  }
+  package "Service layer" {
+    [TradeService\n(all business rules)] as Service
+    [app.state.clock\nSystemClock, or SwitchableClock\nin demo mode (thread-safe)] as Clock
+  }
+  package "Data access" {
+    [TradeRepository] as Repo
+    [SQLAlchemy engine\n+ session factory] as DbLayer
+  }
+  [APScheduler\nBackgroundScheduler] as Scheduler
+}
+
+database "SQLite (default)\nor PostgreSQL\n(DATABASE_URL)" as DB
+
+Client --> Routes : HTTP/JSON
+Tester --> UiRoutes : GET /ui
+UiRoutes --> Static : FileResponse /\nStaticFiles
+Tester --> Routes : fetch /trades,\n/admin/expire-trades
+Tester --> DemoRoutes : fetch /admin/clock,\n/admin/trades
+Routes --> Deps
+DemoRoutes --> Deps
+Deps --> Service
+DemoRoutes --> Clock : set / clear override
+Service --> Clock : today()
+Service --> Repo
+Repo --> DbLayer
+DbLayer --> DB
+Main --> Routes
+Main --> DemoRoutes : include if DEMO_MODE
+Main --> UiRoutes : include if ENABLE_UI
+Main --> Clock : creates one shared instance
+Main --> Scheduler : start / shutdown\n(ENABLE_SCHEDULER)
+Scheduler --> Service : expire_matured_trades()\nstartup + daily cron
+Scheduler ..> Clock : same instance
+
+package "GitHub Actions CI/CD" {
+  [lint\nruff + mypy] as Lint
+  [unit-tests\npytest + coverage >= 90%] as Unit
+  [regression-tests\npytest -m regression] as Regression
+  [security-scan\nTrivy fs (fail CRITICAL)\nSARIF + pip-audit] as Security
+  [docker\nbuild + smoke test\nTrivy image (fail CRITICAL)] as Docker
+}
+
+Lint --> Unit
+Unit --> Regression
+Lint --> Security
+Regression --> Docker
+Security --> Docker
+@enduml
